@@ -37,6 +37,13 @@ def send_mail(status=''):
     print("Sending email:\n{status}".format(status=status))
     return
 
+def term_out(output = ''):
+    old_stdout = sys.stdout
+    output = StringIO()
+    sys.stdout = output
+    sys.stdout = old_stdout
+    return
+
 status_for_hosts = []
 
 for key, value in interfaces.items():
@@ -47,18 +54,21 @@ for key, value in interfaces.items():
         output = connect.send_command('enable',expect_string=r'#')
         host_name = connect.send_command('show run | in hostname',expect_string=r'#')                       
         interface_status = connect.send_command(f'show ip int brief',expect_string=r'#')
-        old_stdout = sys.stdout
-        interface_result = StringIO()
-        sys.stdout = interface_result
-        sys.stdout = old_stdout
+        term_out(output = 'interface_result')
         data = pd.read_fwf(StringIO(interface_status),  widths=[27, 16, 3, 7, 23, 8])
         for index, row in data.iterrows():
             if row[4] == 'administratively down' or row[4] == 'down':
                 status_list.append(f"\nInterface {row[0]} is down in {host_name}\n")
-
+       
+        bgp_status = connect.send_command('show ip bgp summary | be N',expect_string=r'#')
+        term_out(output = 'bgp_result')
+        bgp_data = pd.read_fwf(StringIO(bgp_status),  delim_whitespace=True, header=None)
+        for index, row in bgp_data.iterrows():
+            if row[9] == 'Down' or row[9] == 'Idle' or row[9] == 'Active':
+                status_list.append(f"\nNeighbor {row[0]} is down in {host_name}\n")    
         
-# Use join() instead of string concatenation
-full_status = ''.join(status_list)
-status_for_hosts.append(full_status)
+    # Use join() instead of string concatenation
+    full_status = ''.join(status_list)
+    status_for_hosts.append(full_status)
 
 send_mail(status='\n'.join(status_for_hosts))
